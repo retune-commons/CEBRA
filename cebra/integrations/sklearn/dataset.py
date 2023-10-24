@@ -12,6 +12,7 @@
 """Datasets to be used as part of the sklearn framework."""
 
 from typing import Iterable, Optional
+import warnings
 
 import numpy as np
 import numpy.typing as npt
@@ -141,11 +142,19 @@ class SklearnDataset(cebra.data.SingleSessionDataset):
                     y = y.unsqueeze(1)
                 continuous_index.append(y)
             elif cebra.helper._is_integer(y):
-                y = torch.from_numpy(y).long().squeeze()
-                if y.dim() > 1:
-                    raise ValueError(
-                        f"All discrete indices need to be one dimensional, got {y.size()}."
+
+                if y.ndim > 1:
+                    warnings.warn(
+                        f"All discrete indices need to be one dimensional, got {y.shape}."
+                        f"Stacking multidimensional variables into one."
                     )
+
+                    y_squeeze_one_d = y.copy()
+                    for axis_ in range(len(y.shape)):
+                        y_squeeze_one_d[:, axis_] = y[:, axis_] * 10**axis_
+                    y = y_squeeze_one_d.sum(axis=1)
+
+                y = torch.from_numpy(y).long().squeeze()
                 discrete_index.append(y)
 
         if len(discrete_index) > 1:
