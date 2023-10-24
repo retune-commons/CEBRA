@@ -1316,3 +1316,84 @@ Below is the documentation on the available arguments.
     --train-ratio 0.8     Ratio of train dataset. The remaining will be used for valid and test split.
     --valid-ratio 0.1     Ratio of validation set after the train data split. The remaining will be test split
     --share-model
+
+Quick Start: Explicit initialization of a CEBRA model with PyTorch 
+------------------------------------------------------------------
+
+For developing new sampling strategies, a new data loader and potentially new criterion 
+can be specified.
+Here the the sklearn-API is extended to explicitly show additional initialization.
+
+.. testcode::
+
+    import numpy as np
+    import cebra.datasets
+    from cebra import plot_embedding
+    import torch
+
+    neural_data = cebra.load_data(file="neural_data.npz", key="neural")
+    continuous_label = cebra.load_data(
+        file="auxiliary_behavior_data.h5",
+        key="auxiliary_variables",
+        columns=["continuous1", "continuous2", "continuous3"],
+    )
+
+    # 1. Define Cebra Dataset
+    InputData = cebra.data.TensorDataset(
+        torch.from_numpy(neural_data).type(torch.FloatTensor),
+        continuous=torch.from_numpy(np.array(continuous_label)).type(torch.FloatTensor),
+        # discrete=torch.from_numpy(np.array(cat_label)).type(torch.LongTensor)
+    ).to("cpu")
+
+    # 2. Define Cebra Model
+    neural_model = cebra.models.init(
+        name="offset10-model",
+        num_neurons=InputData.input_dimension,
+        num_units=32,
+        num_output=2,
+    ).to("cpu")
+
+    InputData.configure_for(neural_model)
+
+    # 3. Define Loss Function Criterion and Optimizer
+    Crit = cebra.models.criterions.LearnableCosineInfoNCE(
+        # temperature=0.001,
+        # min_temperature=0.0001
+    ).to("cpu")
+
+    Opt = torch.optim.Adam(
+        list(neural_model.parameters()) + list(Crit.parameters()),
+        # lr=0.001,
+        weight_decay=0,
+    )
+
+    # 4. Initialize Cebra Model
+    cebra_model = cebra.solver.init(
+        name="single-session",
+        model=neural_model,
+        criterion=Crit,
+        optimizer=Opt,
+        tqdm_on=True,
+    ).to("cpu")
+
+    # 5. Define Data Loader
+    loader = cebra.data.single_session.ContinuousDataLoader(
+        dataset=InputData, num_steps=1000, batch_size=200
+    )
+    # loader = cebra.data.single_session.DiscreteDataLoader(dataset=InputData, num_steps=1000, batch_size=200)
+
+    # 6. Fit model
+    cebra_model.fit(loader=loader)
+
+    # 7. Transform embedding
+    TrainBatches = np.lib.stride_tricks.sliding_window_view(
+        neural_data, neural_model.get_offset().__len__(), axis=0
+    )
+    X_train_emb = cebra_model.transform(
+        torch.from_numpy(TrainBatches[:]).type(torch.FloatTensor).to("cpu")
+    ).to("cpu")
+
+    # 8. Potentially plot embedding
+    plot_embedding(
+        X_train_emb, continuous_label[neural_model.get_offset().__len__()-1:, 0], markersize=10
+    )
