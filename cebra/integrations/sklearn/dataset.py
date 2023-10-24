@@ -143,7 +143,7 @@ class SklearnDataset(cebra.data.SingleSessionDataset):
                 continuous_index.append(y)
             elif cebra.helper._is_integer(y):
 
-                if y.ndim > 1:
+                if y.shape[1] > 1:
                     warnings.warn(
                         f"All discrete indices need to be one dimensional, got {y.shape}."
                         f"Stacking multidimensional variables into one."
